@@ -1,0 +1,8 @@
+google-genai
+PyAudio
+python-dotenv
+pyttsx3
+rapidfuzz
+requests
+SpeechRecognition
+websockets
