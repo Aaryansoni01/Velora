@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VELORA — AI Voice Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&family=Sora:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="script.js"></script>
+
+  <style>
+    @property --accR {
+      syntax: '<number>';
+      initial-value: 56;
+      inherits: true;
+    }
+
+    @property --accG {
+      syntax: '<number>';
+      initial-value: 169;
+      inherits: true;
+    }
+
+    @property --accB {
+      syntax: '<number>';
+      initial-value: 255;
+      inherits: true;
+    }
+
+    @property --acc2R {
+      syntax: '<number>';
+      initial-value: 139;
+      inherits: true;
+    }
+
+    @property --acc2G {
+      syntax: '<number>';
+      initial-value: 92;
+      inherits: true;
+    }
+
+    @property --acc2B {
+      syntax: '<number>';
+      initial-value: 246;
+      inherits: true;
+    }
+
+    :root {
+      --accR: 56;
+      --accG: 169;
+      --accB: 255;
+      --acc2R: 139;
+      --acc2G: 92;
+      --acc2B: 246;
+
+      --accent: rgb(var(--accR), var(--accG), var(--accB));
+      --accent2: rgb(var(--acc2R), var(--acc2G), var(--acc2B));
+      --accent-a: rgba(var(--accR), var(--accG), var(--accB), 0.65);
+      --accent-dim: rgba(var(--accR), var(--accG), var(--accB), 0.14);
+      --accent-glow: rgba(var(--accR), var(--accG), var(--accB), 0.35);
+
+      --glass-bg: rgba(6, 10, 22, 0.45);
+      --glass-border: rgba(255, 255, 255, 0.11);
+      --glass-border-hi: rgba(var(--accR), var(--accG), var(--accB), 0.50);
+
+      --text-hi: rgba(255, 255, 255, 0.95);
+      --text-mid: rgba(255, 255, 255, 0.65);
+      --text-lo: rgba(255, 255, 255, 0.35);
+
+      --font-heading: 'Outfit', 'Sora', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #010104;
+      font-family: var(--font-heading);
+      color: var(--text-hi);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+    }
+
+    /* ================= FILM GRAIN OVERLAY ================= */
+    .film-grain {
+      position: fixed;
+      inset: 0;
+      z-index: 9;
+      pointer-events: none;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+    }
+
+    /* ================= ATMOSPHERE & BACKGROUND ================= */
+    #bgCanvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      transition: transform 0.2s ease-out;
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background: radial-gradient(circle at 50% 50%, transparent 35%, rgba(1, 1, 4, 0.90) 100%);
+    }
+
+    .ambient-glow-pass {
+      position: fixed;
+      left: 50%;
+      top: 42%;
+      width: 820px;
+      height: 820px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--accent-dim) 0%, rgba(var(--acc2R), var(--acc2G), var(--acc2B), 0.07) 45%, transparent 70%);
+      filter: blur(95px);
+      z-index: 1;
+      pointer-events: none;
+      transition: background 1.2s ease;
+    }
+
+    .core-shadow-floor {
+      position: fixed;
+      left: 50%;
+      top: 58%;
+      width: 420px;
+      height: 110px;
+      transform: translate(-50%, -50%) rotateX(75deg);
+      border-radius: 50%;
+      background: radial-gradient(ellipse at center, rgba(var(--accR), var(--accG), var(--accB), 0.25) 0%, rgba(0, 0, 0, 0.8) 60%, transparent 80%);
+      filter: blur(35px);
+      z-index: 1;
+      pointer-events: none;
+      transition: background 1.2s ease;
+    }
+
+    .bloom-bleed-pass {
+      position: fixed;
+      left: 50%;
+      top: 40%;
+      width: 340px;
+      height: 340px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(var(--accR), var(--accG), var(--accB), 0.22) 0%, transparent 65%);
+      filter: blur(40px);
+      z-index: 2;
+      pointer-events: none;
+      transition: background 1s ease;
+    }
+
+    /* ================= TOP BRANDING & STATUS CLUSTER ================= */
+    .topbar {
+      position: fixed;
+      top: 28px;
+      left: 36px;
+      right: 36px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: auto;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--text-mid);
+    }
+
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 16px var(--accent);
+      animation: breatheDot 3s ease-in-out infinite;
+    }
+
+    @keyframes breatheDot {
+
+      0%,
+      100% {
+        opacity: 0.5;
+        transform: scale(0.9);
+      }
+
+      50% {
+        opacity: 1;
+        transform: scale(1.3);
+      }
+    }
+
+    .top-status-cluster {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-badge {
+      padding: 6px 14px;
+      border-radius: 100px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      color: var(--text-lo);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: border-color 0.4s ease, box-shadow 0.4s ease;
+    }
+
+    .status-badge .indicator {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      transition: background 0.4s ease, box-shadow 0.4s ease;
+    }
+
+    .sound-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 100px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      color: var(--text-lo);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      cursor: pointer;
+      backdrop-filter: blur(20px);
+      transition: all 0.3s ease;
+    }
+
+    .sound-btn:hover {
+      color: var(--text-hi);
+      border-color: var(--accent-a);
+      box-shadow: 0 0 20px var(--accent-dim);
+    }
+
+    .sound-btn svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+    }
+
+    /* ================= CENTER STAGE ================= */
+    #mainStage {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      transition: transform 0.15s ease-out;
+    }
+
+    #coreCanvasWrap {
+      width: 620px;
+      height: 620px;
+      position: relative;
+      pointer-events: none;
+      margin-top: -30px;
+    }
+
+    #coreCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .core-label-wrapper {
+      margin-top: -50px;
+      text-align: center;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .core-state-title {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      color: var(--accent);
+      text-shadow: 0 0 24px var(--accent-a), 0 0 50px var(--accent-glow);
+      transition: color 0.6s ease, text-shadow 0.6s ease;
+    }
+
+    .core-state-sub {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-lo);
+      letter-spacing: 2.5px;
+      margin-top: 6px;
+      text-transform: lowercase;
+    }
+
+    /* ================= EVENT-DRIVEN FLOATING TRANSCRIPT HUD ================= */
+    .transcript-hud-float {
+      position: fixed;
+      left: 50%;
+      bottom: 120px;
+      transform: translateX(-50%);
+      z-index: 10;
+      width: 540px;
+      max-width: 88vw;
+      padding: 16px 22px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, rgba(8, 12, 26, 0.75), rgba(12, 16, 34, 0.55));
+      border: 1px solid var(--glass-border-hi);
+      border-left: 3px solid var(--accent);
+      backdrop-filter: blur(30px) saturate(180%);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px var(--accent-dim);
+      opacity: 0;
+      transform: translateX(-50%) translateY(20px) scale(0.96);
+      pointer-events: none;
+      transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .transcript-hud-float.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    .transcript-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .transcript-body {
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.92);
+      letter-spacing: 0.2px;
+      font-weight: 400;
+    }
+
+    .caret {
+      display: inline-block;
+      width: 6px;
+      height: 13px;
+      background: var(--accent);
+      margin-left: 3px;
+      vertical-align: middle;
+      box-shadow: 0 0 10px var(--accent);
+      animation: blinkCaret 0.8s steps(1) infinite;
+    }
+
+    @keyframes blinkCaret {
+      50% {
+        opacity: 0;
+      }
+    }
+
+    /* ================= FLOATING MACOS-STYLE BOTTOM DOCK ================= */
+    .mac-dock-wrapper {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: flex;
+      align-items: flex-end;
+      gap: 18px;
+      padding: 10px 22px;
+      border-radius: 40px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(28px) saturate(180%);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      pointer-events: auto;
+      transition: transform 0.1s ease-out;
+    }
+
+    .dock-item {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-mid);
+      cursor: pointer;
+      position: relative;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transform-origin: bottom center;
+      transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease;
+      will-change: transform;
+    }
+
+    .dock-item svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.7;
+    }
+
+    .dock-item:hover {
+      color: var(--text-hi);
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+
+    .dock-item::after {
+      content: attr(data-label);
+      position: absolute;
+      bottom: 64px;
+      left: 50%;
+      transform: translateX(-50%) translateY(4px);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-hi);
+      background: rgba(8, 10, 20, 0.94);
+      border: 1px solid var(--glass-border);
+      padding: 5px 11px;
+      border-radius: 8px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(16px);
+    }
+
+    .dock-item:hover::after {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Hero Center Microphone Orb in Dock */
+    .hero-mic-orb {
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+      margin: 0 4px;
+      background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.04) 70%);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      transform-origin: bottom center;
+      transition: transform 0.35s ease, box-shadow 0.35s ease;
+    }
+
+    .hero-mic-orb svg {
+      width: 30px;
+      height: 30px;
+      stroke: var(--text-hi);
+      fill: none;
+      stroke-width: 1.8;
+      z-index: 3;
+      position: relative;
+    }
+
+    .mic-ring-conic {
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      background: conic-gradient(from 0deg, var(--accent), transparent 30%, transparent 70%, var(--accent));
+      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px));
+      mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px));
+      animation: rotateRing 4s linear infinite;
+      opacity: 0.9;
+      transition: opacity 0.3s ease;
+    }
+
+    @keyframes rotateRing {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .mic-halo-pulse {
+      position: absolute;
+      inset: -20px;
+      border-radius: 50%;
+      border: 1.5px solid var(--accent-a);
+      opacity: 0;
+      transform: scale(0.85);
+    }
+
+    .hero-mic-orb.engaged .mic-halo-pulse {
+      animation: haloExpand 1.5s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    }
+
+    @keyframes haloExpand {
+      0% {
+        opacity: 0.95;
+        transform: scale(0.85);
+      }
+
+      100% {
+        opacity: 0;
+        transform: scale(1.85);
+      }
+    }
+
+    .hero-mic-orb.engaged {
+      box-shadow: 0 0 50px var(--accent-a), 0 0 90px var(--accent-dim);
+    }
+
+    #micAudioCanvas {
+      position: absolute;
+      inset: -16px;
+      width: 116px;
+      height: 116px;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* Dynamic Ripple FX */
+    .click-ripple {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 99;
+      background: radial-gradient(circle, var(--accent-a) 0%, transparent 70%);
+      transform: translate(-50%, -50%);
+    }
+
+    /* MODAL OVERLAY & FALLBACK INPUT */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(1, 2, 8, 0.80);
+      backdrop-filter: blur(24px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s ease;
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-window {
+      width: 620px;
+      max-width: 88vw;
+      padding: 30px;
+      border-radius: 28px;
+      background: rgba(8, 12, 24, 0.65);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(32px);
+      box-shadow: 0 30px 70px rgba(0, 0, 0, 0.7);
+      transform: scale(0.92) translateY(20px);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-backdrop.open .modal-window {
+      transform: scale(1) translateY(0);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+
+    .modal-title {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .modal-close {
+      cursor: pointer;
+      color: var(--text-lo);
+      transition: color 0.2s;
+    }
+
+    .modal-close:hover {
+      color: var(--text-hi);
+    }
+
+    .modal-close svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+    }
+
+    .modal-body-input {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .modal-text-input {
+      flex: 1;
+      padding: 12px 18px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      color: #fff;
+      font-family: var(--font-heading);
+      font-size: 14px;
+      outline: none;
+    }
+
+    .modal-text-input:focus {
+      border-color: var(--accent-a);
+    }
+
+    .modal-submit-btn {
+      padding: 12px 22px;
+      border-radius: 12px;
+      border: none;
+      background: var(--accent);
+      color: #000;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .modal-submit-btn:hover {
+      transform: scale(1.04);
+      box-shadow: 0 0 20px var(--accent);
+    }
+
+    #memoryGraphCanvas {
+      width: 100%;
+      height: 260px;
+      display: block;
+      border-radius: 16px;
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    @media (max-width: 768px) {
+      #coreCanvasWrap {
+        width: 90vw;
+        height: 90vw;
+      }
+
+      .mac-dock-wrapper {
+        gap: 10px;
+        padding: 8px 14px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- FILM GRAIN OVERLAY -->
+  <div class="film-grain"></div>
+
+  <!-- ATMOSPHERE & SHADOW ANCHORS -->
+  <canvas id="bgCanvas"></canvas>
+  <div class="vignette"></div>
+  <div class="ambient-glow-pass" id="ambientGlow"></div>
+  <div class="bloom-bleed-pass" id="bloomBleed"></div>
+  <div class="core-shadow-floor" id="coreShadowFloor"></div>
+
+  <!-- TOPBAR BRAND & COMPACT STATUS CLUSTER -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <span>VELORA // CONSCIOUSNESS OS</span>
+    </div>
+
+    <div class="top-status-cluster">
+      <div class="status-badge" id="stateBadge">
+        <span class="indicator"></span>
+        <span id="badgeStateLabel">IDLE</span>
+      </div>
+      <div class="sound-btn" id="soundToggleBtn">
+        <svg viewBox="0 0 24 24">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+        </svg>
+        <span id="soundLabel">SOUND: ON</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER STAGE (3D AI CORE & RECENTERED STATE TEXT) -->
+  <div id="mainStage">
+    <div id="coreCanvasWrap">
+      <canvas id="coreCanvas"></canvas>
+    </div>
+
+    <div class="core-label-wrapper">
+      <div class="core-state-title" id="coreStateTitle">IDLE</div>
+      <div class="core-state-sub" id="coreStateSub">say "Velora" or tap microphone</div>
+    </div>
+  </div>
+
+  <!-- EVENT-DRIVEN FLOATING TRANSCRIPT HUD -->
+  <div class="transcript-hud-float" id="transcriptHud">
+    <div class="transcript-header">
+      <span id="transcriptHeaderTag">// SPEECH STREAM</span>
+      <span class="mono" id="transcriptTime">00:00:00</span>
+    </div>
+    <div class="transcript-body" id="transcriptText"></div>
+  </div>
+
+  <!-- FLOATING MACOS-STYLE BOTTOM DOCK -->
+  <div class="mac-dock-wrapper" id="macDock">
+    <div class="dock-item" data-id="chat" data-label="Chat & Text Input">
+      <svg viewBox="0 0 24 24">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+    </div>
+    <div class="dock-item" data-id="vision" data-label="Vision Camera">
+      <svg viewBox="0 0 24 24">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    </div>
+
+    <!-- Hero Microphone Orb (Center, Largest) -->
+    <div class="hero-mic-orb" id="heroMicOrb" title="Tap to Speak (Spacebar)">
+      <div class="mic-ring-conic" id="micRingConic"></div>
+      <div class="mic-halo-pulse"></div>
+      <canvas id="micAudioCanvas"></canvas>
+      <svg viewBox="0 0 24 24">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+        <line x1="12" y1="19" x2="12" y2="23" />
+      </svg>
+    </div>
+
+    <div class="dock-item" data-id="screen" data-label="Screen Share">
+      <svg viewBox="0 0 24 24">
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
+      </svg>
+    </div>
+    <div class="dock-item" data-id="settings" data-label="Settings">
+      <svg viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="3" />
+        <path
+          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.36.4.66.74.86.34.2.61.5.86.86.25.36.4.79.44 1.24.05.45-.02.9-.19 1.32-.18.42-.46.79-.82 1.07" />
+      </svg>
+    </div>
+  </div>
+
+  <!-- MODAL OVERLAY & FALLBACK INPUT -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title" id="modalTitle">KNOWLEDGE GRAPH</div>
+        <div class="modal-close" onclick="closeModal()">
+          <svg viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </div>
+      </div>
+
+      <div id="modalGraphContainer">
+        <canvas id="memoryGraphCanvas"></canvas>
+      </div>
+
+      <div id="modalInputContainer" style="display:none;">
+        <p style="font-size:13px; color:var(--text-mid); margin-bottom:12px;">Type your command to VELORA AI Assistant:
+        </p>
+        <div class="modal-body-input">
+          <input type="text" class="modal-text-input" id="fallbackTextInput" placeholder="Ask VELORA anything..."
+            autocomplete="off">
+          <button class="modal-submit-btn" id="fallbackSubmitBtn">EXECUTE</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ============================================================
+       WEB AUDIO API PROCEDURAL SYNTHESIZER
+    ============================================================ */
+    let audioCtx = null;
+    let soundEnabled = true;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) audioCtx = new AudioContext();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playSynthSound(type) {
+      if (!soundEnabled) return;
+      initAudio();
+      if (!audioCtx) return;
+
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain); gain.connect(audioCtx.destination);
+
+      if (type === 'hover') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(750, now);
+        osc.frequency.exponentialRampToValueAtTime(1100, now + 0.035);
+        gain.gain.setValueAtTime(0.015, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+        osc.start(now); osc.stop(now + 0.035);
+      } else if (type === 'click') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1300, now);
+        osc.frequency.exponentialRampToValueAtTime(350, now + 0.07);
+        gain.gain.setValueAtTime(0.04, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+        osc.start(now); osc.stop(now + 0.07);
+      } else if (type === 'stateShift') {
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.connect(gain2); gain2.connect(audioCtx.destination);
+
+        osc.type = 'sine'; osc2.type = 'sine';
+        osc.frequency.setValueAtTime(280, now);
+        osc.frequency.exponentialRampToValueAtTime(560, now + 0.22);
+        osc2.frequency.setValueAtTime(420, now);
+        osc2.frequency.exponentialRampToValueAtTime(840, now + 0.22);
+
+        gain.gain.setValueAtTime(0.025, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        gain2.gain.setValueAtTime(0.018, now);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+
+        osc.start(now); osc.stop(now + 0.22);
+        osc2.start(now); osc2.stop(now + 0.22);
+      }
+    }
+
+    document.getElementById('soundToggleBtn').addEventListener('click', () => {
+      soundEnabled = !soundEnabled;
+      document.getElementById('soundLabel').textContent = soundEnabled ? 'SOUND: ON' : 'SOUND: OFF';
+      if (soundEnabled) playSynthSound('click');
+    });
+
+    /* ============================================================
+       SINGLE SOURCE OF TRUTH STATE MACHINE
+    ============================================================ */
+    const STATES = {
+      idle: {
+        title: 'IDLE', sub: 'say "Velora" or tap microphone',
+        rgbPrimary: [56, 169, 255], rgbSecondary: [139, 92, 246],
+        rotSpeed: 0.07, compress: 1.0, noise: 0.03, ringSpeed: 1.0
+      },
+      listening: {
+        title: 'LISTENING...', sub: 'speak clearly into microphone',
+        rgbPrimary: [0, 210, 255], rgbSecondary: [0, 114, 255],
+        rotSpeed: 0.12, compress: 0.50, noise: 0.10, ringSpeed: 2.0
+      },
+      thinking: {
+        title: 'THINKING...', sub: 'synthesizing multi-modal response',
+        rgbPrimary: [168, 85, 247], rgbSecondary: [236, 72, 153],
+        rotSpeed: 0.75, compress: 1.22, noise: 0.28, ringSpeed: 4.2
+      },
+      speaking: {
+        title: 'SPEAKING...', sub: 'synthesizing voice output',
+        rgbPrimary: [34, 230, 214], rgbSecondary: [0, 180, 216],
+        rotSpeed: 0.20, compress: 1.02, noise: 0.14, ringSpeed: 1.8
+      },
+      error: {
+        title: 'ERROR', sub: 'signal desynchronized',
+        rgbPrimary: [255, 77, 94], rgbSecondary: [255, 0, 85],
+        rotSpeed: 0.50, compress: 0.90, noise: 0.40, ringSpeed: 4.0
+      },
+      'permission-denied': {
+        title: 'MIC DENIED', sub: 'click text chat to type command',
+        rgbPrimary: [255, 153, 0], rgbSecondary: [255, 51, 0],
+        rotSpeed: 0.25, compress: 0.85, noise: 0.20, ringSpeed: 2.5
+      },
+      sleeping: {
+        title: 'SLEEPING', sub: 'dormant mode · click to wake',
+        rgbPrimary: [42, 59, 110], rgbSecondary: [30, 41, 59],
+        rotSpeed: 0.02, compress: 0.45, noise: 0.01, ringSpeed: 0.3
+      }
+    };
+
+    let currentState = 'idle';
+    let colorLive = { r: 56, g: 169, b: 255, r2: 139, g2: 92, b2: 246 };
+
+    function setAIState(stateName, userInitiated = true) {
+      if (!STATES[stateName]) return;
+      const prevState = currentState;
+      currentState = stateName;
+      const target = STATES[stateName];
+
+      if (userInitiated) playSynthSound('stateShift');
+
+      // Synchronized color temperature transition across UI layers
+      gsap.to(colorLive, {
+        r: target.rgbPrimary[0], g: target.rgbPrimary[1], b: target.rgbPrimary[2],
+        r2: target.rgbSecondary[0], g2: target.rgbSecondary[1], b2: target.rgbSecondary[2],
+        duration: 1.1, ease: 'power2.out',
+        onUpdate: () => {
+          document.documentElement.style.setProperty('--accR', colorLive.r.toFixed(0));
+          document.documentElement.style.setProperty('--accG', colorLive.g.toFixed(0));
+          document.documentElement.style.setProperty('--accB', colorLive.b.toFixed(0));
+          document.documentElement.style.setProperty('--acc2R', colorLive.r2.toFixed(0));
+          document.documentElement.style.setProperty('--acc2G', colorLive.g2.toFixed(0));
+          document.documentElement.style.setProperty('--acc2B', colorLive.b2.toFixed(0));
+        }
+      });
+
+      document.getElementById('coreStateTitle').textContent = target.title;
+      document.getElementById('coreStateSub').textContent = target.sub;
+      document.getElementById('badgeStateLabel').textContent = target.title;
+
+      const micOrb = document.getElementById('heroMicOrb');
+      micOrb.classList.toggle('engaged', stateName === 'listening' || stateName === 'speaking');
+
+      // MOTION SIGNATURES PER TRANSITION
+      if (coreGroup) {
+        if (stateName === 'listening') {
+          gsap.fromTo(coreGroup.scale, { x: 1.2, y: 1.2, z: 1.2 }, { x: 0.85, y: 0.85, z: 0.85, duration: 0.45, ease: 'back.out(2)' });
+        } else if (stateName === 'thinking') {
+          gsap.fromTo(coreGroup.rotation, { z: coreGroup.rotation.z - 0.4 }, { z: coreGroup.rotation.z + 0.4, duration: 0.6, ease: 'power3.out' });
+        } else if (stateName === 'speaking') {
+          gsap.fromTo(coreGroup.scale, { x: 0.9, y: 0.9, z: 0.9 }, { x: 1.08, y: 1.08, z: 1.08, duration: 0.5, ease: 'elastic.out(1, 0.5)' });
+        }
+      }
+
+      triggerEventDrivenTranscript(stateName);
+    }
+
+    // Dummy handler to satisfy motion signatures callback if referenced
+    function triggerEventDrivenTranscript(state) {
+      // Can bind state updates or cleanups here
+    }
+
+    /* ============================================================
+       MULTI-LAYER PARALLAX (3 DIFFERENTIAL LAYERS)
+    ============================================================ */
+    let rawMouseX = 0, rawMouseY = 0;
+    let lerpMouseX = 0, lerpMouseY = 0;
+
+    window.addEventListener('mousemove', e => {
+      rawMouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+      rawMouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+
+      // Parallax on MacOS dock
+      const dock = document.getElementById('macDock');
+      if (dock) {
+        dock.style.transform = `translateX(calc(-50% + ${rawMouseX * 12}px)) translateY(${rawMouseY * -6}px)`;
+      }
+    });
+
+    /* ============================================================
+       BACKGROUND ATMOSPHERE & TWINKLING STARFIELD
+    ============================================================ */
+    const bgCanvas = document.getElementById('bgCanvas');
+    const bgCtx = bgCanvas.getContext('2d');
+
+    function resizeBg() {
+      bgCanvas.width = window.innerWidth;
+      bgCanvas.height = window.innerHeight;
+    }
+    resizeBg(); window.addEventListener('resize', resizeBg);
+
+    const bgStars = Array.from({ length: 260 }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      radius: Math.random() * 1.3 + 0.2,
+      twinklePhase: Math.random() * Math.PI * 2,
+      twinkleSpeed: Math.random() * 0.04 + 0.015,
+      speed: Math.random() * 0.04 + 0.01
+    }));
+
+    function renderBackground() {
+      bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+      const time = performance.now() * 0.001;
+
+      const bgOffsetX = lerpMouseX * 18;
+      const bgOffsetY = lerpMouseY * 12;
+
+      bgStars.forEach(s => {
+        s.y -= s.speed * (currentState === 'thinking' ? 2.2 : 1.0);
+        if (s.y < 0) s.y = bgCanvas.height;
+
+        const tw = 0.35 + Math.sin(time * s.twinkleSpeed * 60 + s.twinklePhase) * 0.35;
+
+        bgCtx.beginPath();
+        bgCtx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.1, tw * 0.85)})`;
+        bgCtx.arc(s.x + bgOffsetX, s.y + bgOffsetY, s.radius, 0, Math.PI * 2);
+        bgCtx.fill();
+      });
+
+      requestAnimationFrame(renderBackground);
+    }
+    renderBackground();
+
+    /* ============================================================
+       3D THREE.JS AI CORE ENGINE
+    ============================================================ */
+    let scene, camera, renderer;
+    let coreGroup, corePoints, glassSphere, ring1, ring2, ring3, synapseLines;
+    const PARTICLE_COUNT = 3800;
+    const CORE_RADIUS = 130;
+    const clock = new THREE.Clock();
+
+    function makeSoftTexture() {
+      const cvs = document.createElement('canvas'); cvs.width = cvs.height = 64;
+      const ctx = cvs.getContext('2d');
+      const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      g.addColorStop(0.35, 'rgba(255, 255, 255, 0.7)');
+      g.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(cvs);
+    }
+
+    function initCore() {
+      const wrap = document.getElementById('coreCanvasWrap');
+      const canvas = document.getElementById('coreCanvas');
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(45, 1, 0.1, 2000);
+      camera.position.z = 460;
+
+      renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      coreGroup = new THREE.Group();
+      scene.add(coreGroup);
+
+      const sGeo = new THREE.IcosahedronGeometry(CORE_RADIUS * 1.05, 3);
+      const sMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, wireframe: true, transparent: true, opacity: 0.05,
+        blending: THREE.AdditiveBlending
+      });
+      glassSphere = new THREE.Mesh(sGeo, sMat);
+      coreGroup.add(glassSphere);
+
+      const positions = new Float32Array(PARTICLE_COUNT * 3);
+      const originalPos = new Float32Array(PARTICLE_COUNT * 3);
+      const colors = new Float32Array(PARTICLE_COUNT * 3);
+      const golden = (1 + Math.sqrt(5)) / 2;
+
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const theta = 2 * Math.PI * i / golden;
+        const phi = Math.acos(1 - 2 * (i + 0.5) / PARTICLE_COUNT);
+
+        const x = CORE_RADIUS * Math.sin(phi) * Math.cos(theta);
+        const y = CORE_RADIUS * Math.sin(phi) * Math.sin(theta);
+        const z = CORE_RADIUS * Math.cos(phi);
+
+        positions[i * 3] = originalPos[i * 3] = x;
+        positions[i * 3 + 1] = originalPos[i * 3 + 1] = y;
+        positions[i * 3 + 2] = originalPos[i * 3 + 2] = z;
+
+        colors[i * 3] = 0.35; colors[i * 3 + 1] = 0.65; colors[i * 3 + 2] = 1.0;
+      }
+
+      const pGeo = new THREE.BufferGeometry();
+      pGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      pGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      pGeo.userData = { originalPos };
+
+      const pMat = new THREE.PointsMaterial({
+        size: 2.8, map: makeSoftTexture(), transparent: true, depthWrite: false,
+        vertexColors: true, blending: THREE.AdditiveBlending
+      });
+
+      corePoints = new THREE.Points(pGeo, pMat);
+      coreGroup.add(corePoints);
+
+      function makeRing(radius, tiltX, tiltY, opacity) {
+        const pts = []; const count = 120;
+        for (let i = 0; i <= count; i++) {
+          const a = (i / count) * Math.PI * 2;
+          pts.push(new THREE.Vector3(Math.cos(a) * radius, 0, Math.sin(a) * radius));
+        }
+        const g = new THREE.BufferGeometry().setFromPoints(pts);
+        const m = new THREE.LineBasicMaterial({
+          color: 0x5599ff, transparent: true, opacity, blending: THREE.AdditiveBlending
+        });
+        const line = new THREE.LineLoop(g, m);
+        line.rotation.x = tiltX; line.rotation.y = tiltY;
+        coreGroup.add(line);
+        return line;
+      }
+
+      ring1 = makeRing(CORE_RADIUS * 1.35, Math.PI / 2.3, 0.2, 0.42);
+      ring2 = makeRing(CORE_RADIUS * 1.60, Math.PI / 3.4, 0.6, 0.28);
+      ring3 = makeRing(CORE_RADIUS * 1.85, Math.PI / 1.7, -0.4, 0.20);
+
+      const linePositions = new Float32Array(100 * 6);
+      const lGeo = new THREE.BufferGeometry();
+      lGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+      const lMat = new THREE.LineBasicMaterial({
+        color: 0x88bbff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending
+      });
+      synapseLines = new THREE.LineSegments(lGeo, lMat);
+      coreGroup.add(synapseLines);
+
+      resizeCore();
+      window.addEventListener('resize', resizeCore);
+      animateCore();
+    }
+
+    function resizeCore() {
+      const wrap = document.getElementById('coreCanvasWrap').getBoundingClientRect();
+      renderer.setSize(wrap.width, wrap.height, false);
+      camera.aspect = wrap.width / wrap.height;
+      camera.updateProjectionMatrix();
+    }
+
+    function animateCore() {
+      requestAnimationFrame(animateCore);
+
+      const dt = clock.getDelta();
+      const time = clock.getElapsedTime();
+      const st = STATES[currentState];
+
+      lerpMouseX += (rawMouseX - lerpMouseX) * 0.05;
+      lerpMouseY += (rawMouseY - lerpMouseY) * 0.05;
+
+      coreGroup.rotation.y += st.rotSpeed * dt;
+      coreGroup.rotation.x = Math.sin(time * 0.25) * 0.08 + lerpMouseY * 0.28;
+      coreGroup.rotation.z = lerpMouseX * 0.22;
+
+      ring1.rotation.z += dt * 0.28 * st.ringSpeed;
+      ring2.rotation.z -= dt * 0.20 * st.ringSpeed;
+      ring3.rotation.z += dt * 0.14 * st.ringSpeed;
+
+      const positions = corePoints.geometry.attributes.position.array;
+      const colors = corePoints.geometry.attributes.color.array;
+      const orig = corePoints.geometry.userData.originalPos;
+
+      const rNorm = colorLive.r / 255, gNorm = colorLive.g / 255, bNorm = colorLive.b / 255;
+
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const idx = i * 3;
+        const ox = orig[idx], oy = orig[idx + 1], oz = orig[idx + 2];
+
+        const breathe = 1 + Math.sin(time * 2 + ox * 0.01) * 0.04;
+        const noise = Math.sin(time * 4 + idx) * st.noise * CORE_RADIUS;
+
+        let wave = 0;
+        if (currentState === 'speaking') {
+          wave = Math.sin(time * 14 + oy * 0.08) * 18;
+        }
+
+        positions[idx] = (ox * st.compress + noise) * breathe;
+        positions[idx + 1] = (oy * st.compress + noise + wave) * breathe;
+        positions[idx + 2] = (oz * st.compress + noise) * breathe;
+
+        const worldZ = oz * st.compress;
+        const normZ = Math.max(0, Math.min(1, (worldZ + CORE_RADIUS) / (2 * CORE_RADIUS)));
+        const depthBrightness = 0.22 + 0.78 * normZ;
+
+        colors[idx] = rNorm * depthBrightness;
+        colors[idx + 1] = gNorm * depthBrightness;
+        colors[idx + 2] = bNorm * depthBrightness;
+      }
+
+      corePoints.geometry.attributes.position.needsUpdate = true;
+      corePoints.geometry.attributes.color.needsUpdate = true;
+
+      ring1.material.color.setRGB(rNorm, gNorm, bNorm);
+      ring2.material.color.setRGB(rNorm, gNorm, bNorm);
+      ring3.material.color.setRGB(rNorm, gNorm, bNorm);
+      synapseLines.material.color.setRGB(rNorm, gNorm, bNorm);
+      glassSphere.material.color.setRGB(rNorm, gNorm, bNorm);
+
+      renderer.render(scene, camera);
+    }
+
+    initCore();
+
+    /* ============================================================
+       CIRCULAR AUDIO WAVEFORM
+    ============================================================ */
+    const micAudioCanvas = document.getElementById('micAudioCanvas');
+    const mCtx = micAudioCanvas.getContext('2d');
+
+    function drawMicWaveform() {
+      mCtx.clearRect(0, 0, micAudioCanvas.width, micAudioCanvas.height);
+      const w = micAudioCanvas.width = 116;
+      const h = micAudioCanvas.height = 116;
+      const cx = w / 2, cy = h / 2, baseR = 42;
+      const time = performance.now() * 0.002;
+
+      if (currentState === 'listening' || currentState === 'speaking') {
+        const bars = 44;
+        for (let i = 0; i < bars; i++) {
+          const a = (i / bars) * Math.PI * 2;
+          const freq = Math.sin(a * 4 + time * 6) * Math.cos(a * 8 - time * 3);
+          const amp = (0.5 + 0.5 * freq) * (currentState === 'listening' ? 12 : 18);
+
+          const r1 = baseR;
+          const r2 = baseR + 3 + amp;
+
+          const x1 = cx + Math.cos(a) * r1, y1 = cy + Math.sin(a) * r1;
+          const x2 = cx + Math.cos(a) * r2, y2 = cy + Math.sin(a) * r2;
+
+          mCtx.beginPath();
+          mCtx.moveTo(x1, y1); mCtx.lineTo(x2, y2);
+          mCtx.strokeStyle = `rgba(${colorLive.r | 0}, ${colorLive.g | 0}, ${colorLive.b | 0}, 0.85)`;
+          mCtx.lineWidth = 1.8; mCtx.lineCap = 'round'; mCtx.stroke();
+        }
+      }
+
+      requestAnimationFrame(drawMicWaveform);
+    }
+    drawMicWaveform();
+
+    /* ============================================================
+       REAL SPEECH HUD & STATE SYNC
+    ============================================================ */
+    const transcriptHud = document.getElementById('transcriptHud');
+    const transcriptText = document.getElementById('transcriptText');
+    const transcriptTime = document.getElementById('transcriptTime');
+    const transcriptHeaderTag = document.getElementById('transcriptHeaderTag');
+    let fadeOutTimer = null;
+
+    function updateTime() {
+      const d = new Date();
+      transcriptTime.textContent = d.toTimeString().split(' ')[0] + '.' + Math.floor(d.getMilliseconds() / 100);
+    }
+    setInterval(updateTime, 100);
+
+    function showTranscriptBubble(text, headerTag = "// LIVE TRANSCRIPT") {
+      if (fadeOutTimer) clearTimeout(fadeOutTimer);
+      transcriptHeaderTag.textContent = headerTag;
+      transcriptText.innerHTML = text + '<span class="caret"></span>';
+      transcriptHud.classList.add('visible');
+    }
+
+    function hideTranscriptBubble(delayMs = 4000) {
+      if (fadeOutTimer) clearTimeout(fadeOutTimer);
+      fadeOutTimer = setTimeout(() => {
+        transcriptHud.classList.remove('visible');
+      }, delayMs);
+    }
+
+    // Local mock processor (Offline fallback)
+    async function getAssistantResponse(transcript) {
+      await new Promise(res => setTimeout(res, 1200));
+
+      const textLower = transcript.toLowerCase();
+      let responseText = `I processed your request: "${transcript}". VELORA neural consciousness is fully operational.`;
+
+      if (textLower.includes("hello") || textLower.includes("hi") || textLower.includes("hey")) {
+        responseText = "Greetings. I am VELORA, your spatial AI voice assistant. How can I assist your consciousness today?";
+      } else if (textLower.includes("who are you") || textLower.includes("name")) {
+        responseText = "I am VELORA — a futuristic spatial AI operating system designed for luxury human-computer interaction.";
+      } else if (textLower.includes("time") || textLower.includes("date")) {
+        responseText = `The current system time is ${new Date().toLocaleTimeString()}. All quantum sub-systems are synchronized.`;
+      } else if (textLower.includes("status") || textLower.includes("system")) {
+        responseText = "All neural nodes active at 4.8 GHz. Memory latency is 8ms with 99.8% model confidence.";
+      }
+
+      return { text: responseText };
+    }
+
+    /* ============================================================
+       WEBSOCKET & DUAL-MODE COMMAND DISPATCHER
+    ============================================================ */
+    let socket = null;
+    let reconnectTimer = null;
+
+    function connectWebSocket() {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+
+      socket = new WebSocket("ws://localhost:8765");
+
+      socket.onopen = () => {
+        console.log("Connected to AI Voice Assistant backend.");
+        document.getElementById('badgeStateLabel').textContent = "CONNECTED";
+        document.getElementById('stateBadge').style.borderColor = "var(--glass-border-hi)";
+        showTranscriptBubble("Connected to VELORA Neural Backend.", "// SYSTEM STATUS");
+        hideTranscriptBubble(3000);
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("WebSocket event from backend:", data);
+
+          if (data.type === "state") {
+            setAIState(data.value);
+
+            if (data.value === "error") {
+              const errText = data.transcript || "Sorry, I couldn't process your request.";
+              showTranscriptBubble(
+                `${errText} <button id="retryBtn" style="margin-left:12px; padding:5px 12px; border-radius:6px; border:none; background:var(--accent); color:#000; font-family:var(--font-mono); font-size:10px; font-weight:600; cursor:pointer; box-shadow:0 0 10px var(--accent-glow);">RETRY</button>`,
+                "// SYSTEM ERROR"
+              );
+
+              setTimeout(() => {
+                if (currentState === 'error') {
+                  setAIState('idle');
+                }
+              }, 6000);
+            }
+          }
+
+          if (data.transcript) {
+            showTranscriptBubble(data.transcript, "// LIVE TRANSCRIPT");
+          }
+
+          if (data.response) {
+            showTranscriptBubble(data.response, "// ASSISTANT VOICE");
+          }
+        } catch (e) {
+          console.error("Error handling WebSocket message:", e);
+        }
+      };
+
+      socket.onclose = () => {
+        console.log("WebSocket disconnected. Retrying in 4 seconds...");
+        document.getElementById('badgeStateLabel').textContent = "DISCONNECTED";
+        document.getElementById('stateBadge').style.borderColor = "rgba(255, 77, 94, 0.4)";
+        reconnectTimer = setTimeout(connectWebSocket, 4000);
+      };
+
+      socket.onerror = (err) => {
+        console.error("WebSocket error:", err);
+      };
+    }
+
+    // Global Event Handler for Retry Button in System Error HUD
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'retryBtn') {
+        playSynthSound('click');
+        hideTranscriptBubble(0);
+        toggleMicrophoneCapture();
+      }
+    });
+
+    // Run WebSocket Connection
+    connectWebSocket();
+
+    /* ============================================================
+       SPEECH RECOGNITION (LOCAL FALLBACK MODE)
+    ============================================================ */
+    let recognition = null;
+    let isListening = false;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        isListening = true;
+        setAIState('listening');
+        showTranscriptBubble("Listening (Local)...", "// MIC CAPTURE");
+      };
+
+      recognition.onresult = (event) => {
+        let interimText = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimText += event.results[i][0].transcript;
+          }
+        }
+
+        const currentText = finalTranscript || interimText;
+        if (currentText) {
+          showTranscriptBubble(currentText, "// LIVE TRANSCRIPT");
+        }
+
+        if (finalTranscript) {
+          processUserFinalTranscript(finalTranscript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.warn("Speech Recognition Error:", event.error);
+        isListening = false;
+
+        if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+          setAIState('permission-denied');
+          showTranscriptBubble("Microphone permission denied. Please allow microphone access or type your command.", "// PERMISSION ALERT");
+          hideTranscriptBubble(6000);
+        } else {
+          setAIState('error');
+          showTranscriptBubble(
+            "Speech capture interrupted. <button id=\"retryBtn\" style=\"margin-left:12px; padding:5px 12px; border-radius:6px; border:none; background:var(--accent); color:#000; font-family:var(--font-mono); font-size:10px; font-weight:600; cursor:pointer;\">RETRY</button>",
+            "// SYSTEM ERROR"
+          );
+          setTimeout(() => {
+            if (currentState === 'error') setAIState('idle');
+          }, 5000);
+        }
+      };
+
+      recognition.onend = () => {
+        isListening = false;
+        if (currentState === 'listening') {
+          setAIState('idle');
+        }
+      };
+    }
+
+    async function processUserFinalTranscript(transcript) {
+      if (recognition) try { recognition.stop(); } catch (e) { }
+      isListening = false;
+
+      setAIState('thinking');
+      showTranscriptBubble(`Processing intent: "${transcript}"...`, "// REASONING GRAPH");
+
+      try {
+        const res = await getAssistantResponse(transcript);
+        speakAssistantResponse(res.text);
+      } catch (err) {
+        setAIState('error');
+        showTranscriptBubble(
+          "Failed to generate response. <button id=\"retryBtn\" style=\"margin-left:12px; padding:5px 12px; border-radius:6px; border:none; background:var(--accent); color:#000; font-family:var(--font-mono); font-size:10px; font-weight:600; cursor:pointer;\">RETRY</button>",
+          "// ERROR"
+        );
+        setTimeout(() => {
+          if (currentState === 'error') setAIState('idle');
+        }, 5000);
+      }
+    }
+
+    function speakAssistantResponse(text) {
+      setAIState('speaking');
+      showTranscriptBubble(text, "// ASSISTANT VOICE");
+
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+
+        utterance.onend = () => {
+          setAIState('idle');
+          hideTranscriptBubble(4000);
+        };
+
+        utterance.onerror = () => {
+          setAIState('idle');
+          hideTranscriptBubble(3000);
+        };
+
+        window.speechSynthesis.speak(utterance);
+      } else {
+        setTimeout(() => {
+          setAIState('idle');
+          hideTranscriptBubble(4000);
+        }, 4500);
+      }
+    }
+
+    function toggleMicrophoneCapture() {
+      const micOrb = document.getElementById('heroMicOrb');
+      const micRing = document.getElementById('micRingConic');
+      if (micOrb) {
+        gsap.fromTo(micOrb, { scale: 1.18 }, { scale: 1.0, duration: 0.35, ease: 'back.out(3)' });
+      }
+      if (micRing) {
+        gsap.fromTo(micRing, { opacity: 1 }, { opacity: 0.85, duration: 0.25 });
+      }
+
+      // Active WebSocket Connection: Delegate recording to backend
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        if (currentState === 'listening') {
+          socket.send(JSON.stringify({ action: "stop_listening" }));
+          setAIState('idle');
+        } else {
+          socket.send(JSON.stringify({ action: "start_listening" }));
+        }
+        return;
+      }
+
+      // Offline Fallback Mode: Capturing via Browser Web Speech API
+      if (isListening) {
+        if (recognition) try { recognition.stop(); } catch (e) { }
+        isListening = false;
+        setAIState('idle');
+        return;
+      }
+
+      if (SpeechRecognition && recognition) {
+        try {
+          recognition.start();
+        } catch (e) {
+          console.warn("Recognition start failed, re-initializing:", e);
+          setAIState('listening');
+        }
+      } else {
+        openTextFallbackModal();
+      }
+    }
+
+    document.getElementById('heroMicOrb').addEventListener('click', () => {
+      playSynthSound('click');
+      toggleMicrophoneCapture();
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        toggleMicrophoneCapture();
+      }
+    });
+
+    /* ============================================================
+       MACOS HOVER MAGNIFICATION
+    ============================================================ */
+    const macDock = document.getElementById('macDock');
+    const dockItems = Array.from(macDock.children);
+
+    macDock.addEventListener('mousemove', e => {
+      const rect = macDock.getBoundingClientRect();
+      dockItems.forEach(el => {
+        const b = el.getBoundingClientRect();
+        const center = b.left + b.width / 2 - rect.left;
+        const dist = Math.abs(e.clientX - rect.left - center);
+
+        const maxScale = el.classList.contains('hero-mic-orb') ? 1.25 : 1.45;
+        const scale = Math.max(1, maxScale - dist / 160);
+        const translateY = (scale - 1) * -16;
+
+        gsap.to(el, { scale, y: translateY, duration: 0.2, ease: 'power2.out' });
+      });
+    });
+
+    macDock.addEventListener('mouseleave', () => {
+      dockItems.forEach(el => {
+        gsap.to(el, { scale: 1, y: 0, duration: 0.35, ease: 'power3.out' });
+      });
+    });
+
+    dockItems.forEach(item => {
+      item.addEventListener('mouseenter', () => playSynthSound('hover'));
+      item.addEventListener('click', (e) => {
+        if (item.classList.contains('hero-mic-orb')) return;
+        playSynthSound('click');
+        createRipple(e.clientX, e.clientY);
+
+        const id = item.dataset.id;
+        if (id === 'chat') openTextFallbackModal();
+        if (id === 'vision') setAIState('thinking');
+        if (id === 'settings') openModal('SYSTEM SETTINGS');
+        if (id === 'screen') openModal('SPATIAL PROJECTION');
+      });
+    });
+
+    /* ============================================================
+       MODAL OVERLAY & FALLBACK INPUT
+    ============================================================ */
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const mgCanvas = document.getElementById('memoryGraphCanvas');
+    const mgCtx = mgCanvas.getContext('2d');
+    const modalGraphContainer = document.getElementById('modalGraphContainer');
+    const modalInputContainer = document.getElementById('modalInputContainer');
+
+    function openModal(title) {
+      document.getElementById('modalTitle').textContent = title;
+      modalGraphContainer.style.display = 'block';
+      modalInputContainer.style.display = 'none';
+      modalBackdrop.classList.add('open');
+      drawGraph();
+    }
+
+    function openTextFallbackModal() {
+      document.getElementById('modalTitle').textContent = "COMMAND CHAT INPUT";
+      modalGraphContainer.style.display = 'none';
+      modalInputContainer.style.display = 'block';
+      modalBackdrop.classList.add('open');
+      setTimeout(() => document.getElementById('fallbackTextInput').focus(), 150);
+    }
+
+    function closeModal() {
+      modalBackdrop.classList.remove('open');
+    }
+
+    document.getElementById('fallbackSubmitBtn').addEventListener('click', submitFallbackText);
+    document.getElementById('fallbackTextInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') submitFallbackText();
+    });
+
+    function submitFallbackText() {
+      const inputEl = document.getElementById('fallbackTextInput');
+      const val = inputEl.value.trim();
+      if (!val) return;
+      inputEl.value = '';
+      closeModal();
+
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ action: "text_command", value: val }));
+      } else {
+        processUserFinalTranscript(val);
+      }
+    }
+
+    const graphNodes = Array.from({ length: 14 }, (_, i) => ({
+      x: Math.random() * 460 + 40, y: Math.random() * 200 + 40,
+      vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5,
+      size: Math.random() * 5 + 4
+    }));
+
+    function drawGraph() {
+      if (!modalBackdrop.classList.contains('open') || modalGraphContainer.style.display === 'none') return;
+      mgCanvas.width = mgCanvas.clientWidth * 2;
+      mgCanvas.height = mgCanvas.clientHeight * 2;
+      const w = mgCanvas.width, h = mgCanvas.height;
+
+      mgCtx.clearRect(0, 0, w, h);
+
+      graphNodes.forEach((n, i) => {
+        n.x += n.vx; n.y += n.vy;
+        if (n.x < 20 || n.x > w - 20) n.vx *= -1;
+        if (n.y < 20 || n.y > h - 20) n.vy *= -1;
+
+        for (let j = i + 1; j < graphNodes.length; j++) {
+          const n2 = graphNodes[j];
+          const dist = Math.hypot(n.x - n2.x, n.y - n2.y);
+          if (dist < 160) {
+            mgCtx.beginPath();
+            mgCtx.moveTo(n.x, n.y); mgCtx.lineTo(n2.x, n2.y);
+            mgCtx.strokeStyle = `rgba(${colorLive.r | 0}, ${colorLive.g | 0}, ${colorLive.b | 0}, ${1 - dist / 160})`;
+            mgCtx.lineWidth = 1.2; mgCtx.stroke();
+          }
+        }
+
+        mgCtx.beginPath();
+        mgCtx.arc(n.x, n.y, n.size * 1.5, 0, Math.PI * 2);
+        mgCtx.fillStyle = `rgb(${colorLive.r | 0}, ${colorLive.g | 0}, ${colorLive.b | 0})`;
+        mgCtx.fill();
+      });
+
+      requestAnimationFrame(drawGraph);
+    }
+
+    /* ============================================================
+       CLICK RIPPLE FX
+    ============================================================ */
+    function createRipple(x, y) {
+      const r = document.createElement('div');
+      r.className = 'click-ripple';
+      r.style.left = x + 'px'; r.style.top = y + 'px';
+      r.style.width = r.style.height = '10px';
+      document.body.appendChild(r);
+
+      gsap.to(r, {
+        width: 130, height: 130, opacity: 0, duration: 0.6, ease: 'power2.out',
+        onComplete: () => r.remove()
+      });
+    }
+
+    // Initial Boot state shift
+    setTimeout(() => {
+      setAIState('idle', false);
+    }, 200);
+  </script>
+</body>
+
+</html>
